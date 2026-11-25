@@ -8,17 +8,29 @@ const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
+const greet = (name='') => {
+  const h = new Date().getHours();
+  const p = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Good night';
+  return `${p}, ${name.split(' ')[0]}`;
+};
+const setTodayLabel = () => { $('todayLabel').textContent = new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}); };
 const avatarFallback = (name='U') => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=eeeaff&color=6c5ce7&bold=true`;
 const pairKey = (a,b) => [a,b].sort().join('_');
 let currentUser = null, profile = null, allUsers = [], ownTasks = [], friendTasks = [];
 let friends = [], incomingRequests = [], outgoingRequests = [], selectedFriend = '';
-let taskFilter = 'all', calendarDate = new Date(), peopleSearchTerm = '';
+let taskFilter = 'all', peopleSearchTerm = '';
 let selectedDayKey = todayKey(), viewedMember = null, viewedMemberTasks = [];
 let unsubscribers = [], friendTasksUnsub = null, friendTasksLoading = false;
 
-function toast(message, type='') {
-  const el = $('toast'); el.textContent = message; el.className = `toast show ${type}`;
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.className='toast', 2800);
+function toast(message, type='', action) {
+  const el = $('toast'); el.textContent = message;
+  if (action) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-action'; b.textContent = action.label;
+    b.addEventListener('click', () => { el.className = 'toast'; action.fn(); });
+    el.append(b);
+  }
+  el.className = `toast show ${type}`;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.className='toast', action ? 6000 : 2800);
 }
 function setBusy(button, busy, text) {
   if (!button) return;
@@ -43,6 +55,7 @@ document.querySelectorAll('.switch-btn').forEach(btn => btn.addEventListener('cl
   document.querySelectorAll('.switch-btn').forEach(b=>b.classList.toggle('active',b===btn));
   const register = btn.dataset.mode === 'register';
   $('nameField').classList.toggle('hidden',!register);
+  $('forgotRow').classList.toggle('hidden',register);
   $('authHeading').textContent = register ? 'Create your account' : 'Welcome back';
   $('authSubheading').textContent = register ? 'Start building better habits with a friend.' : 'Sign in and pick up where you left off.';
   $('authSubmit').textContent = register ? 'Create account' : 'Sign in';
@@ -77,10 +90,27 @@ function friendlyAuthError(err){
   const map={'auth/email-already-in-use':'This email is already registered.','auth/invalid-email':'Enter a valid email address.','auth/weak-password':'Password must contain at least 6 characters.','auth/user-not-found':'No account found for this email.','auth/wrong-password':'Incorrect password.','auth/invalid-credential':'Email or password is incorrect.','auth/too-many-requests':'Too many attempts. Try again later.'};
   return map[err.code] || err.message || 'Something went wrong.';
 }
-$('logoutBtn').addEventListener('click',()=>auth.signOut());
+function closeAllDialogs(){document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
+$('logoutBtn').addEventListener('click',()=>{closeAllDialogs();auth.signOut();});
+$('togglePw').addEventListener('click',()=>{
+  const input=$('password'),show=input.type==='password';
+  input.type=show?'text':'password';
+  $('togglePw').textContent=show?'Hide':'Show';
+  $('togglePw').setAttribute('aria-label',show?'Hide password':'Show password');
+});
+$('forgotBtn').addEventListener('click',async()=>{
+  const email=$('email').value.trim().toLowerCase();
+  if(!email){$('authError').textContent='Enter your email first, then tap Forgot password.';return;}
+  try{await auth.sendPasswordResetEmail(email);$('authError').textContent='';toast('Reset link sent. Check your inbox.');}
+  catch(err){$('authError').textContent=friendlyAuthError(err);}
+});
 auth.onAuthStateChanged(async user => {
   stopListeners(); currentUser=user;
-  if(!user){profile=null;showAuth();return;}
+  if(!user){
+    profile=null;closeAllDialogs();
+    selectedFriend='';friends=[];allUsers=[];ownTasks=[];friendTasks=[];incomingRequests=[];outgoingRequests=[];viewedMember=null;viewedMemberTasks=[];
+    showAuth();return;
+  }
   showApp();
   try {
     const ref=db.collection('users').doc(user.uid);
@@ -90,9 +120,9 @@ auth.onAuthStateChanged(async user => {
       snap=await ref.get();
     }
     profile={uid:user.uid,...snap.data()};
-    $('welcomeTitle').textContent=`Let's make today count, ${profile.displayName.split(' ')[0]}.`;
-    $('todayLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    selectedDayKey=todayKey(); calendarDate=new Date();
+    $('welcomeTitle').textContent=greet(profile.displayName);
+    setTodayLabel();
+    selectedDayKey=todayKey();
     renderProfile();
     startListeners();
   } catch(err){console.error(err);toast('Could not load your profile. Check Firebase setup.','error');}
@@ -117,15 +147,16 @@ function startListeners(){
     renderPeople();
   },'users');
   listen(db.collection('tasks').where('ownerUid','==',currentUser.uid),snap=>{
-    ownTasks=snap.docs.map(d=>({id:d.id,...d.data()})); renderTasks(); renderStats(); renderCalendar(); renderSelectedDayInfo(); renderComparison(); renderTopStreak();
+    ownTasks=snap.docs.map(d=>({id:d.id,...d.data()})); renderTasks(); renderStats(); renderWeekStrip(); renderSelectedDayInfo(); renderComparison(); renderTopStreak();
   },'your tasks');
   listen(db.collection('friendships').where('users','array-contains',currentUser.uid),async snap=>{
     const ids=snap.docs.map(d=>(d.data().users||[]).find(id=>id!==currentUser.uid)).filter(Boolean);
     friends=await Promise.all(ids.map(async uid=>{
       const s=await db.collection('users').doc(uid).get(); return s.exists?{uid,...s.data()}:null;
     }));
-    friends=friends.filter(Boolean); renderFriendSelect(); renderPeople(); renderComparison();
-    if(selectedFriend&&!friends.some(f=>f.uid===selectedFriend)){selectedFriend='';$('friendSelect').value='';}
+    friends=friends.filter(Boolean);
+    if(selectedFriend&&!friends.some(f=>f.uid===selectedFriend)){selectedFriend='';}
+    renderFriendSelect(); renderPeople(); renderComparison();
     loadFriendTasks();
   },'friends');
   listen(db.collection('friendRequests').where('toUid','==',currentUser.uid).where('status','==','pending'),snap=>{
@@ -162,13 +193,13 @@ $('taskForm').addEventListener('submit',async e=>{
   const frequency=$('taskFrequency').value;
   if(!title)return;
   const btn=e.submitter;setBusy(btn,true,'Adding…');
-  const today=todayKey();
+  const day=selectedDayKey;
   const newTask={
     ownerUid:currentUser.uid,
     title,
     frequency,
-    date:today,
-    startDate:frequency==='daily'?today:null,
+    date:day,
+    startDate:frequency==='daily'?day:null,
     completed:false,
     completedDates:{},
     createdAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -177,7 +208,8 @@ $('taskForm').addEventListener('submit',async e=>{
   try{
     await db.collection('tasks').add(newTask);
     $('taskTitle').value='';
-    toast(frequency==='daily'?'Daily task added. It will appear every day.':'Task added for today.');
+    const when=day===todayKey()?'today':safeDateLabel(day);
+    toast(frequency==='daily'?`Daily task added. It repeats every day from ${when}.`:`Task added for ${when}.`);
   }catch(err){console.error(err);toast('Could not add task. Check Firestore rules.','error');}
   finally{setBusy(btn,false);}
 });
@@ -185,20 +217,32 @@ async function toggleTask(task,completed){
   try{
     const ref=db.collection('tasks').doc(task.id);
     if(task.frequency==='daily'){
-      const field=`completedDates.${todayKey()}`;
+      const field=`completedDates.${selectedDayKey}`;
       await ref.update({[field]:completed?true:firebase.firestore.FieldValue.delete()});
     } else {
       await ref.update({completed,completedAt:completed?firebase.firestore.FieldValue.serverTimestamp():null});
     }
+  if(completed){
+      const date=selectedDayKey;
+      const left=getTasksForDate(date).filter(t=>t.id!==task.id&&!isTaskCompletedOn(t,date)).length;
+      if(!left){confetti();toast(date===todayKey()?'All done for today! 🎉':`All done for ${safeDateLabel(date)}! 🎉`);}
+    }
   }catch(err){console.error(err);toast('Could not update task.','error');}
 }
 async function deleteTask(task){
-  if(!confirm(`Delete "${task.title}"${task.frequency==='daily'?' from your daily routine':''}?`))return;
-  try{await db.collection('tasks').doc(task.id).delete();toast('Task deleted.');}
-  catch(err){console.error(err);toast('Could not delete task.','error');}
+  const {id,...data}=task;
+  try{
+    await db.collection('tasks').doc(id).delete();
+    toast('Task deleted.','',{label:'Undo',fn:async()=>{
+      try{await db.collection('tasks').doc(id).set(data);toast('Task restored.');}
+      catch(err){console.error(err);toast('Could not restore the task.','error');}
+    }});
+  }catch(err){console.error(err);toast('Could not delete task.','error');}
 }
 function renderTasks(){
-  const date=todayKey();
+  const date=selectedDayKey;
+  const isToday=date===todayKey();
+  $('taskHeading').textContent=isToday?"Today's tasks":`Tasks · ${safeDateLabel(date)}`;
   const selected=getTasksForDate(date);
   const visible=selected.filter(t=>{
     const done=isTaskCompletedOn(t,date);
@@ -206,7 +250,7 @@ function renderTasks(){
   });
   $('taskCount').textContent=`${selected.length} ${selected.length===1?'task':'tasks'}`;
   $('taskList').innerHTML='';
-  if(!visible.length){$('taskList').innerHTML=`<div class="empty-state">${selected.length?'Nothing in this filter.':'No tasks for today. Add a task or create a daily routine.'}</div>`;return;}
+  if(!visible.length){$('taskList').innerHTML=`<div class="empty-state">${selected.length?'Nothing in this filter.':(isToday?'Nothing here yet. Add your first task above.':'No tasks on this day. Add one above to plan it.')}</div>`;return;}
   visible.sort((a,b)=>{
     const ad=isTaskCompletedOn(a,date),bd=isTaskCompletedOn(b,date);
     if(ad!==bd)return ad?1:-1;
@@ -217,8 +261,9 @@ function renderTasks(){
     const row=document.createElement('div');row.className=`task-item ${done?'done':''}`;
     const check=document.createElement('input');check.type='checkbox';check.className='task-check';check.checked=done;check.setAttribute('aria-label',`Mark ${task.title} completed`);check.addEventListener('change',()=>toggleTask(task,check.checked));
     const title=document.createElement('span');title.className='task-title';title.textContent=task.title;
-    const dateLabel=document.createElement('span');dateLabel.className='task-date';dateLabel.textContent=task.frequency==='daily'?'Every day':'Today';
+    const dateLabel=document.createElement('span');dateLabel.className='task-date';dateLabel.textContent=task.frequency==='daily'?'Every day':'One-time';
     const del=document.createElement('button');del.className='delete-task';del.type='button';del.textContent='×';del.title='Delete task';del.setAttribute('aria-label',`Delete ${task.title}`);del.addEventListener('click',()=>deleteTask(task));
+    row.addEventListener('click',e=>{if(e.target===check||e.target===del)return;check.click();});
     row.append(check,title,dateLabel,del);$('taskList').append(row);
   });
 }
@@ -243,20 +288,22 @@ function currentStreak(tasks){
 }
 function keyFor(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function renderStats(){
-  const date=todayKey();
+  const date=selectedDayKey;
+  $('doneLabel').textContent=date===todayKey()?'Done today':`Done · ${safeDateLabel(date)}`;
   const todays=getTasksForDate(date);
   const done=todays.filter(t=>isTaskCompletedOn(t,date)).length;
   const rate=todays.length?Math.round(done/todays.length*100):0;
   const streak=currentStreak(ownTasks);
-  $('completedStat').textContent=done;$('totalStat').textContent=`of ${todays.length} tasks`;$('streakStat').textContent=`${streak} ${streak===1?'day':'days'}`;$('rateStat').textContent=`${rate}%`;
-  $('streakMessage').textContent=streak?`${streak}-day streak. Amazing!`:'Start your streak today';
-  $('streakDetail').textContent=streak?'You are showing up consistently. Keep going!':'Complete at least one task each day.';
+  $('completedStat').textContent=`${done}/${todays.length}`;
+  $('streakStat').textContent=`${streak} ${streak===1?'day':'days'}`;
+  $('rateStat').textContent=`${rate}%`;
+  $('progressFill').style.width=`${rate}%`;document.querySelector('.day-progress').setAttribute('aria-valuenow',String(rate));
   renderTopStreak();
 }
 function renderTopStreak(){
   if(!$('topStreak'))return;
   const streak=currentStreak(ownTasks);
-  $('topStreak').textContent=`${streak} ${streak===1?'day':'days'} streak`;
+  $('topStreak').textContent=`${streak}-day streak`;
 }
 function formatLongDate(key){
   return new Date(`${key}T00:00:00`).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -268,77 +315,60 @@ function getDayTotals(tasks,date){
 }
 function renderSelectedDayInfo(){
   const date=selectedDayKey;
-  const mine=getDayTotals(ownTasks,date);
-  let text=`${formatLongDate(date)} · You: ${mine.done}/${mine.total} completed`;
-  if(selectedFriend){
-    const friend=friends.find(f=>f.uid===selectedFriend);
-    if(friendTasksLoading) text+=` · ${friend?.displayName||'Friend'}: loading…`;
-    else {
-      const theirs=getDayTotals(friendTasks,date);
-      text+=` · ${friend?.displayName||'Friend'}: ${theirs.done}/${theirs.total} completed`;
-    }
-  }
-  $('selectedDayInfo').textContent=text;
-  $('comparisonDateLabel').textContent=date===todayKey()?'Comparing today':`Comparing ${formatLongDate(date)}`;
-  const dayList=$('selectedDayTasks');dayList.innerHTML='';
-  const myTasks=getTasksForDate(date,ownTasks);
-  if(!myTasks.length){dayList.innerHTML='<p class="history-empty">No personal tasks recorded for this date.</p>';return;}
-  const heading=document.createElement('p');heading.className='history-list-heading';heading.textContent='Your tasks';dayList.append(heading);
-  myTasks.forEach(task=>{
-    const done=isTaskCompletedOn(task,date);
-    const row=document.createElement('div');row.className=`history-task ${done?'done':'pending'}`;
-    const mark=document.createElement('span');mark.textContent=done?'✓':'○';
-    const title=document.createElement('span');title.textContent=task.title;
-    row.append(mark,title);dayList.append(row);
-  });
+  const isToday=date===todayKey();
+  $('comparisonDateLabel').textContent=isToday?'Today':safeDateLabel(date);
+  const long=new Date(`${date}T00:00:00`).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'});
+  $('dayLabel').textContent=isToday?`Today · ${long}`:long;
+  $('dayPicker').value=date;
+  $('todayBtn').classList.toggle('hidden',isToday);
 }
-function renderCalendar(){
-  const year=calendarDate.getFullYear(),month=calendarDate.getMonth();
-  $('monthLabel').textContent=calendarDate.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
-  const first=new Date(year,month,1),offset=(first.getDay()+6)%7,days=new Date(year,month+1,0).getDate();
-  const grid=$('calendarGrid');grid.innerHTML='';
-  for(let i=0;i<offset;i++){const blank=document.createElement('span');blank.className='calendar-day empty';grid.append(blank);}
-  for(let day=1;day<=days;day++){
-    const key=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+function renderWeekStrip(){
+  const strip=$('weekStrip');strip.innerHTML='';
+  const sel=new Date(`${selectedDayKey}T00:00:00`);
+  const start=new Date(sel);start.setDate(sel.getDate()-((sel.getDay()+6)%7));
+  const today=todayKey();
+  for(let i=0;i<7;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    const key=keyFor(d);
     const items=getTasksForDate(key);
-    const completed=items.filter(task=>isTaskCompletedOn(task,key)).length;
-    const cell=document.createElement('button');cell.type='button';cell.className='calendar-day';cell.textContent=day;
-    if(key===todayKey())cell.classList.add('today');
-    if(key===selectedDayKey)cell.classList.add('selected');
-    if(items.length&&completed===items.length)cell.classList.add('has-done');
-    else if(items.length&&completed<items.length&&key<=todayKey())cell.classList.add('has-missed');
-    cell.title=items.length?`${completed}/${items.length} completed`:'No tasks';
-    cell.setAttribute('aria-label',`${formatLongDate(key)}${items.length?`, ${completed} of ${items.length} completed`:', no tasks'}`);
-    cell.addEventListener('click',()=>{
-      selectedDayKey=key;
-      renderCalendar();renderSelectedDayInfo();renderComparison();
-      if(viewedMember)renderMemberProfileActivity();
-    });
-    grid.append(cell);
+    const done=items.filter(t=>isTaskCompletedOn(t,key)).length;
+    const btn=document.createElement('button');btn.type='button';btn.className='week-day';
+    if(key===selectedDayKey)btn.classList.add('selected');
+    if(key===today)btn.classList.add('today');
+    if(items.length&&done===items.length)btn.classList.add('all-done');
+    else if(items.length&&key<today)btn.classList.add('missed');
+    btn.setAttribute('aria-pressed',String(key===selectedDayKey));
+    btn.setAttribute('aria-label',`${formatLongDate(key)}${items.length?`, ${done} of ${items.length} completed`:', no tasks'}`);
+    btn.title=items.length?`${done}/${items.length} completed`:'No tasks';
+    const wd=document.createElement('small');wd.textContent=d.toLocaleDateString('en-IN',{weekday:'short'});
+    const num=document.createElement('b');num.textContent=d.getDate();
+    const dot=document.createElement('i');dot.className='week-dot';
+    btn.append(wd,num,dot);
+    btn.addEventListener('click',()=>setSelectedDay(key));
+    strip.append(btn);
   }
-  renderSelectedDayInfo();
 }
-function shiftCalendarMonth(offset){
-  const next=new Date(calendarDate.getFullYear(),calendarDate.getMonth()+offset,1);
-  const wantedDay=Number(selectedDayKey.slice(8,10))||1;
-  const maxDay=new Date(next.getFullYear(),next.getMonth()+1,0).getDate();
-  calendarDate=next;
-  selectedDayKey=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(Math.min(wantedDay,maxDay)).padStart(2,'0')}`;
-  renderCalendar();renderComparison();
+function setSelectedDay(key){
+  if(!key)return;
+  selectedDayKey=key;
+  renderTasks();renderStats();renderWeekStrip();renderSelectedDayInfo();renderComparison();
   if(viewedMember)renderMemberProfileActivity();
 }
-$('prevMonth').addEventListener('click',()=>shiftCalendarMonth(-1));
-$('nextMonth').addEventListener('click',()=>shiftCalendarMonth(1));
-$('todayCalendarBtn').addEventListener('click',()=>{
-  selectedDayKey=todayKey();calendarDate=new Date();renderCalendar();renderComparison();
-  if(viewedMember)renderMemberProfileActivity();
-});
+function shiftDay(offset){
+  const d=new Date(`${selectedDayKey}T00:00:00`);d.setDate(d.getDate()+offset);setSelectedDay(keyFor(d));
+}
+$('prevDay').addEventListener('click',()=>shiftDay(-1));
+$('nextDay').addEventListener('click',()=>shiftDay(1));
+$('todayBtn').addEventListener('click',()=>setSelectedDay(todayKey()));
+$('dayPicker').addEventListener('change',()=>setSelectedDay($('dayPicker').value));
+$('dayPicker').addEventListener('click',()=>{try{$('dayPicker').showPicker&&$('dayPicker').showPicker();}catch(_){}});
 
 function renderFriendSelect(){
   const select=$('friendSelect'),previous=selectedFriend;select.innerHTML='<option value="">Choose a friend</option>';
   friends.forEach(f=>{const o=document.createElement('option');o.value=f.uid;o.textContent=f.displayName;select.append(o);});
   if(friends.some(f=>f.uid===previous))select.value=previous;
   else if(friends.length&&!selectedFriend){selectedFriend=friends[0].uid;select.value=selectedFriend;}
+  select.classList.toggle('hidden',friends.length<2);
 }
 $('friendSelect').addEventListener('change',()=>{selectedFriend=$('friendSelect').value;loadFriendTasks();});
 function createCompareCard(user,tasks,isFriend,dateKey=selectedDayKey){
@@ -346,48 +376,86 @@ function createCompareCard(user,tasks,isFriend,dateKey=selectedDayKey){
   const done=dayTasks.filter(t=>isTaskCompletedOn(t,dateKey)).length;
   const pct=dayTasks.length?Math.round(done/dayTasks.length*100):0;
   const streak=currentStreak(tasks);
-  const card=document.createElement('div');card.className=`compare-user ${isFriend?'friend':'me'}`;
-  const head=document.createElement('div');head.className='compare-head';
-  const img=document.createElement('img');setProfileImage(img,user?.photoURL,user?.displayName||'User');img.alt='';
-  const name=document.createElement('b');name.textContent=(user?.displayName||'User')+(isFriend?'':' (you)');
-  const streakTag=document.createElement('span');streakTag.className='streak-badge';streakTag.textContent=`🔥 ${streak}d`;
-  head.append(img,name,streakTag);
-  const score=document.createElement('div');score.className='compare-score';score.textContent=`${pct}%`;
-  const sub=document.createElement('p');sub.className='compare-sub';sub.textContent=`${done} of ${dayTasks.length} completed · ${safeDateLabel(dateKey)}`;
-  const progress=document.createElement('div');progress.className='mini-progress';const fill=document.createElement('span');fill.style.width=`${pct}%`;progress.append(fill);
-  const list=document.createElement('div');list.className='compare-tasks';
-  dayTasks.forEach(task=>{
-    const completed=isTaskCompletedOn(task,dateKey);
-    const item=document.createElement('div');item.className=`compare-task ${completed?'done':'pending'}`;
-    item.textContent=`${completed?'✓':'○'} ${task.title}`;list.append(item);
-  });
-  if(!dayTasks.length){const empty=document.createElement('small');empty.className='muted';empty.textContent='No tasks planned for this day.';list.append(empty);}
-  card.append(head,score,sub,progress,list);
+  const card=document.createElement('div');card.className=`vs-side ${isFriend?'friend':'me'}`;card.style.setProperty('--p',pct);
+  const ring=document.createElement('div');ring.className='vs-ring';
+  const img=document.createElement('img');setProfileImage(img,user?.photoURL,user?.displayName||'User');img.alt='';ring.append(img);
+  const name=document.createElement('b');name.className='vs-name';name.textContent=isFriend?(user?.displayName||'Friend'):'You';
+  const score=document.createElement('div');score.className='vs-score';score.innerHTML=`${pct}<span>%</span>`;
+  const meta=document.createElement('div');meta.className='vs-meta';
+  const count=document.createElement('span');count.textContent=`${done}/${dayTasks.length} done`;
+  const streakTag=document.createElement('span');streakTag.className='streak-badge';streakTag.textContent=`🔥 ${streak}`;
+  meta.append(count,streakTag);
+  const list=document.createElement('div');list.className='vs-tasks';
+  const LIMIT=4;let expanded=false;
+  const paint=()=>{
+    list.innerHTML='';
+    if(!dayTasks.length){const e=document.createElement('p');e.className='vs-empty';e.textContent='No tasks';list.append(e);return;}
+    (expanded?dayTasks:dayTasks.slice(0,LIMIT)).forEach(task=>{
+      const completed=isTaskCompletedOn(task,dateKey);
+      const item=document.createElement('div');item.className=`vs-task ${completed?'done':''}`;
+      const mark=document.createElement('span');mark.textContent=completed?'✓':'○';
+      const title=document.createElement('span');title.textContent=task.title;
+      item.append(mark,title);list.append(item);
+    });
+    if(dayTasks.length>LIMIT){
+      const more=document.createElement('button');more.type='button';more.className='vs-more';
+      more.textContent=expanded?'Show less':`+${dayTasks.length-LIMIT} more`;
+      more.addEventListener('click',()=>{expanded=!expanded;paint();});
+      list.append(more);
+    }
+  };
+  paint();
+  card.append(ring,name,score,meta,list);
   return {card,pct,done,total:dayTasks.length,streak};
+}
+let prevLead=null,prevLeadCtx='';
+function confetti(){
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const box=document.createElement('div');box.className='confetti';box.setAttribute('aria-hidden','true');
+  const colors=['#6c5ce7','#16875d','#f39b42','#d94b59','#4cc9f0','#ffd166'];
+  for(let i=0;i<46;i++){
+    const p=document.createElement('i');
+    p.style.cssText=`left:${Math.random()*100}%;background:${colors[i%colors.length]};animation-delay:${Math.random()*.35}s;animation-duration:${1.4+Math.random()*1.1}s;--dx:${(Math.random()*160-80).toFixed(0)}px;--rot:${(Math.random()*720-360).toFixed(0)}deg`;
+    box.append(p);
+  }
+  document.body.append(box);setTimeout(()=>box.remove(),3000);
 }
 function renderComparison(){
   const el=$('comparison'),status=$('challengeStatus');el.innerHTML='';status.className='challenge-status hidden';status.textContent='';
   renderSelectedDayInfo();
-  if(!selectedFriend){el.innerHTML='<div class="empty-state" style="grid-column:1/-1">Add a friend, then select them here to compare progress.</div>';return;}
+  if(!selectedFriend){
+    el.innerHTML=`<div class="empty-state onboarding" style="grid-column:1/-1"><div class="empty-icon">🤝</div><h3>Better together</h3><p>Invite a friend to compare progress side by side.</p><button class="btn btn-primary" type="button" id="emptyFindFriends">＋ Find friends</button></div>`;
+    $('emptyFindFriends').addEventListener('click',()=>{$('peopleDialog').showModal();renderPeople();});
+    return;
+  }
   const friend=friends.find(f=>f.uid===selectedFriend);
-  if(!friend){el.innerHTML='<div class="empty-state" style="grid-column:1/-1">Choose a friend to compare progress.</div>';return;}
-  if(friendTasksLoading){el.innerHTML='<div class="empty-state" style="grid-column:1/-1">Loading your friend’s progress…</div>';return;}
+  if(!friend){el.innerHTML='<div class="empty-state" style="grid-column:1/-1">Choose a friend.</div>';return;}
+  if(friendTasksLoading){el.innerHTML='<div class="skeleton" style="grid-column:1/-1;height:230px"></div>';return;}
   const mine=createCompareCard(profile,ownTasks,false,selectedDayKey);
   const theirs=createCompareCard(friend,friendTasks,true,selectedDayKey);
-  el.append(mine.card,theirs.card);
+  const badge=document.createElement('div');badge.className='vs-badge';badge.textContent='VS';badge.setAttribute('aria-hidden','true');
+  el.append(mine.card,badge,theirs.card);
+  if(mine.total||theirs.total){
+    if(mine.pct>theirs.pct)mine.card.classList.add('lead');
+    else if(theirs.pct>mine.pct)theirs.card.classList.add('lead');
+  }
+  const leadNow=!(mine.total||theirs.total)?'none':mine.pct>theirs.pct?'me':theirs.pct>mine.pct?'friend':'tie';
+  const ctx=`${selectedFriend}|${selectedDayKey}`;
+  if(ctx===prevLeadCtx&&prevLead&&prevLead!=='me'&&leadNow==='me'){confetti();toast('🏆 You took the lead!');}
+  prevLead=leadNow;prevLeadCtx=ctx;
   status.classList.remove('hidden');
-  const dayWord=selectedDayKey===todayKey()?'today':`on ${safeDateLabel(selectedDayKey)}`;
-  if(!mine.total&&!theirs.total){status.classList.add('neutral');status.textContent=`Neither of you had tasks planned ${dayWord}. Choose another date or add a task.`;}
-  else if(!mine.total&&theirs.total){status.classList.add('behind');status.textContent=`${friend.displayName} had ${theirs.total} task${theirs.total===1?'':'s'} planned ${dayWord}. You had no tasks scheduled for this date.`;}
+  const fname=(friend.displayName||'Friend').split(' ')[0];
+  const isToday=selectedDayKey===todayKey();
+  if(!mine.total&&!theirs.total){status.classList.add('neutral');status.textContent='No tasks planned for this day';}
+  else if(!mine.total){status.classList.add('behind');status.textContent=`${fname} has ${theirs.total} task${theirs.total===1?'':'s'}. You have none.`;}
   else if(theirs.pct>mine.pct){
     status.classList.add('behind');
-    const gap=theirs.pct-mine.pct;
     const needed=Math.max(0,Math.ceil((theirs.pct/100)*mine.total)-mine.done);
-    status.textContent=`${friend.displayName} is ahead by ${gap} percentage points (${theirs.done}/${theirs.total} completed). You left ${mine.total-mine.done} task${mine.total-mine.done===1?'':'s'} unfinished ${dayWord}${needed?` — ${needed} more completion${needed===1?'':'s'} would have matched their percentage`:''}.`;
+    status.textContent=`⚡ ${fname} leads by ${theirs.pct-mine.pct} pts${isToday&&needed?` · ${needed} more to catch up`:''}`;
   } else if(mine.pct>theirs.pct){
-    status.classList.add('ahead');status.textContent=`You were ahead by ${mine.pct-theirs.pct} percentage points ${dayWord}. ${friend.displayName} completed ${theirs.done} of ${theirs.total} tasks.`;
+    status.classList.add('ahead');status.textContent=`🏆 You lead by ${mine.pct-theirs.pct} pts`;
   } else {
-    status.classList.add('neutral');status.textContent=`You were tied at ${mine.pct}% ${dayWord}.`;
+    status.classList.add('neutral');status.textContent=`🤝 Tied at ${mine.pct}%`;
   }
 }
 
@@ -420,6 +488,7 @@ async function sendRequest(person){
 }
 function renderRequests(){
   $('requestCount').textContent=incomingRequests.length;
+  document.querySelector('.requests-panel').classList.toggle('hidden',!incomingRequests.length);
   const list=$('requestList');list.innerHTML='';
   if(!incomingRequests.length){list.innerHTML='<p class="muted small">No pending requests.</p>';return;}
   incomingRequests.forEach(async req=>{
@@ -447,6 +516,10 @@ function showMemberProfile(person){
   add.classList.remove('hidden');add.disabled=isFriend||sent||received;
   add.textContent=isFriend?'You are friends':sent?'Request sent':received?'Respond to their request':'＋ Add friend';
   add.onclick=()=>sendRequest(person);
+  const rm=$('publicProfileRemoveBtn');
+  rm.classList.toggle('hidden',!isFriend);
+  add.classList.toggle('hidden',isFriend);
+  rm.onclick=()=>removeFriend(person);
   $('publicProfileStats').innerHTML='';
   $('publicProfileTasks').innerHTML='<p class="muted small">Loading profile activity…</p>';
   $('publicProfileDateLabel').textContent=safeDateLabel(selectedDayKey);
@@ -489,6 +562,17 @@ function renderMemberProfileActivity(){
   });
 }
 
+async function removeFriend(person){
+  if(!confirm(`Remove ${person.displayName||'this friend'} from your friends? You will stop seeing each other's progress.`))return;
+  try{
+    await db.collection('friendships').doc(pairKey(currentUser.uid,person.uid)).delete();
+    // best-effort cleanup so you can send a fresh request later
+    await Promise.all([`${currentUser.uid}_${person.uid}`,`${person.uid}_${currentUser.uid}`].map(id=>db.collection('friendRequests').doc(id).delete().catch(()=>{})));
+    if(viewedMember?.uid===person.uid){viewedMember=null;viewedMemberTasks=[];}
+    $('publicProfileDialog').close();
+    toast(`${person.displayName||'Friend'} removed.`);
+  }catch(err){console.error(err);toast('Could not remove friend. Check Firestore rules allow deleting friendships.','error');}
+}
 async function respondRequest(req,accept){
   try{
     if(accept){
@@ -529,8 +613,36 @@ $('profileForm').addEventListener('submit',async e=>{
     await db.collection('users').doc(currentUser.uid).update({displayName:name,photoURL});
     await currentUser.updateProfile({displayName:name,photoURL});
     profile={...profile,displayName:name,photoURL};renderProfile();
-    $('welcomeTitle').textContent=`Let's make today count, ${name.split(' ')[0]}.`;
+    $('welcomeTitle').textContent=greet(name);
     $('profileDialog').close();toast('Profile updated.');
   }catch(err){console.error(err);$('profileError').textContent='Could not save your profile. Check your Firestore rules and image link.';}
   finally{setBusy(btn,false);}
+});
+
+/* Close a dialog when the dark backdrop is clicked */
+document.querySelectorAll('dialog.modal').forEach(d=>d.addEventListener('click',e=>{
+  if(e.target!==d)return;
+  const r=d.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();
+}));
+
+/* Date pill jumps back to today; refresh the page state when the day changes (e.g. tab left open overnight) */
+$('comparisonDateLabel').addEventListener('click',()=>setSelectedDay(todayKey()));
+let lastToday=todayKey();
+function refreshDay(){
+  const t=todayKey();
+  if(t===lastToday||!currentUser)return;
+  if(selectedDayKey===lastToday){selectedDayKey=t;}
+  lastToday=t;setTodayLabel();
+  if(profile)$('welcomeTitle').textContent=greet(profile.displayName);
+  renderTasks();renderStats();renderWeekStrip();renderSelectedDayInfo();renderComparison();
+}
+setInterval(refreshDay,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDay();});
+
+/* Phones: tap "Tasks" in the comparison box to show/hide both task lists */
+$('cmpToggle').addEventListener('click',()=>{
+  const panel=document.querySelector('.featured-compare');
+  const open=panel.classList.toggle('cmp-open');
+  $('cmpToggle').setAttribute('aria-expanded',String(open));
 });

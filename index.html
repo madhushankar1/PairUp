@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f6f7fb">
   <title>PairUp — Shared Goals</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +17,7 @@
 
   <main id="authView" class="auth-view">
     <section class="auth-visual">
-      <div class="brand"><span class="brand-mark">P</span> pairup</div>
+      <div class="brand"><img class="brand-logo" src="logo.png" alt="PairUp logo"> pairup</div>
       <div class="hero-copy">
         <span class="eyebrow">MAKE PROGRESS TOGETHER</span>
         <h1>Small steps.<br><span>Shared wins.</span></h1>
@@ -27,8 +29,8 @@
     </section>
     <section class="auth-panel">
       <div class="auth-box">
-        <div class="mobile-brand brand"><span class="brand-mark">P</span> pairup</div>
-        <p class="eyebrow">YOUR ACCOUNT</p>
+        <div class="mobile-brand brand"><img class="brand-logo" src="logo.png" alt="PairUp logo"> pairup</div>
+        
         <h2 id="authHeading">Welcome back</h2>
         <p class="muted" id="authSubheading">Sign in and pick up where you left off.</p>
         <div class="auth-switch">
@@ -38,110 +40,110 @@
         <form id="authForm" name="pairup-auth" method="post" autocomplete="on">
           <label id="nameField" class="field hidden">Your name<input id="displayName" name="name" type="text" autocomplete="name" placeholder="e.g. Madhu"></label>
           <label class="field">Email address<input id="email" name="username" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you@example.com" required></label>
-          <label class="field">Password<input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required></label>
+          <label class="field">Password
+            <span class="pw-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
+            <button id="togglePw" class="pw-toggle" type="button" aria-label="Show password">Show</button></span>
+          </label>
+          <div id="forgotRow" class="forgot-row"><button id="forgotBtn" class="text-button" type="button">Forgot password?</button></div>
           <p id="authError" class="error-text"></p>
           <button id="authSubmit" class="btn btn-primary full" type="submit">Sign in</button>
         </form>
-        <p class="auth-foot">Your tasks are private. Friends can view your progress, but only you can edit your tasks.</p>
+        <p class="auth-foot">Private by default. Friends see your progress, only you edit tasks.</p>
       </div>
     </section>
   </main>
 
   <main id="appView" class="app-view hidden">
     <header class="topbar">
-      <a class="brand" href="#"><span class="brand-mark">P</span> pairup</a>
+      <a class="brand" href="#"><img class="brand-logo" src="logo.png" alt="PairUp logo"> pairup</a>
       <div class="topbar-right">
         <div class="top-streak" title="Your current streak"><span>🔥</span><b id="topStreak">0 day streak</b></div>
-        <button id="peopleBtn" class="btn btn-soft" type="button">＋ Find friends</button>
-        <button id="profileButton" class="profile-button" type="button" title="Edit profile">
+        <button id="peopleBtn" class="btn btn-soft" type="button" aria-label="Find friends"><span aria-hidden="true">👥</span><span class="btn-label"> Find friends</span></button>
+        <button id="profileButton" class="profile-button" type="button" title="Edit profile" aria-label="Edit profile">
           <img id="topAvatar" alt="Your profile"><span id="topName">You</span><span class="chevron">⌄</span>
         </button>
-        <button id="logoutBtn" class="icon-button" type="button" title="Sign out">↗</button>
       </div>
     </header>
 
     <div class="page-wrap">
       <section class="welcome-row">
-        <div><p class="eyebrow">YOUR DAILY SPACE</p><h1 id="welcomeTitle">Let's make today count.</h1><p class="muted">A little progress every day adds up.</p></div>
+        <h1 id="welcomeTitle">Hello</h1>
         <div class="date-chip"><span>◷</span><span id="todayLabel"></span></div>
       </section>
 
+      <div class="dashboard">
+      <aside class="side-col">
       <section class="panel compare-panel featured-compare">
-        <div class="panel-heading"><div><p class="eyebrow">FRIENDLY FACE-OFF</p><h2>Who is making more progress?</h2><p class="compare-intro">See what your friend has finished and what you still have left.</p><p id="comparisonDateLabel" class="comparison-date-label">Comparing today</p></div>
-          <select id="friendSelect" class="friend-select" aria-label="Choose a friend"><option value="">Choose a friend</option></select>
+        <div class="panel-heading">
+          <div class="cmp-title"><h2>Who's ahead?</h2><button id="comparisonDateLabel" class="date-pill" type="button" title="Jump to today">Today</button></div>
+          <select id="friendSelect" class="friend-select hidden" aria-label="Choose a friend"><option value="">Choose a friend</option></select>
+          <button id="cmpToggle" class="cmp-toggle" type="button" aria-expanded="false" aria-label="Show or hide task lists">Tasks <span aria-hidden="true">⌄</span></button>
         </div>
         <div id="challengeStatus" class="challenge-status hidden" aria-live="polite"></div>
-        <div id="comparison" class="comparison">
-          <div class="empty-state" style="grid-column:1/-1">Add a friend to make your progress visible side by side.</div>
-        </div>
+        <div id="comparison" class="comparison"></div>
       </section>
+      <section class="panel requests-panel hidden"><div class="panel-heading"><div><h2>Friend requests</h2></div><span id="requestCount" class="count-pill">0</span></div><div id="requestList" class="request-list"><p class="muted small">No pending requests.</p></div></section>
+      </aside>
 
+      <div class="main-col">
       <section class="stats-grid">
-        <article class="stat-card"><div class="stat-icon purple">✓</div><div><span class="stat-label">Completed today</span><strong id="completedStat">0</strong></div><small id="totalStat">of 0 tasks</small></article>
-        <article class="stat-card"><div class="stat-icon orange">🔥</div><div><span class="stat-label">Current streak</span><strong id="streakStat">0 days</strong></div><small>Keep the chain going</small></article>
-        <article class="stat-card"><div class="stat-icon green">↗</div><div><span class="stat-label">Your completion</span><strong id="rateStat">0%</strong></div><small>For today's tasks</small></article>
+        <article class="stat-card"><div class="stat-icon purple">✓</div><div><span class="stat-label" id="doneLabel">Done today</span><strong id="completedStat">0/0</strong></div></article>
+        <article class="stat-card"><div class="stat-icon orange">🔥</div><div><span class="stat-label">Streak</span><strong id="streakStat">0 days</strong></div></article>
+        <article class="stat-card"><div class="stat-icon green">↗</div><div><span class="stat-label">Completion</span><strong id="rateStat">0%</strong></div></article>
+        <div class="day-progress" role="progressbar" aria-label="Day completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progressFill"></span></div>
       </section>
 
-      <section class="main-grid">
-        <div class="left-column">
           <section class="panel tasks-panel">
-            <div class="panel-heading"><div><p class="eyebrow">YOUR CHECKLIST</p><h2>Today's tasks</h2></div><span id="taskCount" class="count-pill">0 tasks</span></div>
+            <div class="panel-heading"><div><h2 id="taskHeading">Today's tasks</h2></div><span id="taskCount" class="count-pill">0 tasks</span></div>
+            <div class="day-nav">
+              <div class="day-nav-top">
+                <button id="prevDay" class="icon-button" type="button" aria-label="Previous day">‹</button>
+                <label class="day-picker"><span id="dayLabel">Today</span><input id="dayPicker" type="date" aria-label="Jump to a date"></label>
+                <button id="nextDay" class="icon-button" type="button" aria-label="Next day">›</button>
+                <button id="todayBtn" class="text-button" type="button">Today</button>
+              </div>
+              <div id="weekStrip" class="week-strip" role="group" aria-label="Pick a day this week"></div>
+            </div>
             <form id="taskForm" class="add-task-form">
-              <input id="taskTitle" type="text" maxlength="100" placeholder="What do you want to get done?" required>
+              <input id="taskTitle" aria-label="Task name" type="text" maxlength="100" placeholder="What do you want to get done?" required>
               <select id="taskFrequency" aria-label="Task schedule">
-                <option value="once">Today only</option>
+                <option value="once">Just once</option>
                 <option value="daily">Every day</option>
               </select>
               <button class="btn btn-primary" type="submit">＋ Add task</button>
             </form>
-            <div class="task-filters"><button class="filter-btn active" data-filter="all">All</button><button class="filter-btn" data-filter="active">To do</button><button class="filter-btn" data-filter="done">Completed</button></div>
-            <div id="taskList" class="task-list"><div class="empty-state">Loading your tasks…</div></div>
+            <div class="task-filters"><button type="button" class="filter-btn active" data-filter="all">All</button><button type="button" class="filter-btn" data-filter="active">To do</button><button type="button" class="filter-btn" data-filter="done">Completed</button></div>
+            <div id="taskList" class="task-list" aria-busy="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
           </section>
-
-        </div>
-
-        <aside class="right-column">
-          <section class="panel calendar-panel">
-            <div class="panel-heading"><div><p class="eyebrow">YOUR ACTIVITY</p><h2>Consistency calendar</h2></div></div>
-            <div class="calendar-nav"><button id="prevMonth" class="icon-button" type="button" aria-label="Previous month">‹</button><b id="monthLabel"></b><button id="nextMonth" class="icon-button" type="button" aria-label="Next month">›</button></div>
-            <div class="calendar-shortcuts"><button id="todayCalendarBtn" class="text-button" type="button">Jump to today</button><span>Choose a date to view both histories</span></div>
-            <div class="calendar-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-            <div id="calendarGrid" class="calendar-grid"></div>
-            <div class="calendar-legend"><span><i class="legend-dot done-dot"></i>All done</span><span><i class="legend-dot missed-dot"></i>Still to do</span></div>
-            <div id="selectedDayInfo" class="selected-day-info">Select a date to explore your and your friend's tasks.</div>
-            <div id="selectedDayTasks" class="selected-day-tasks" aria-live="polite"></div>
-          </section>
-          <section class="panel streak-panel"><div class="streak-flame">🔥</div><div><p class="eyebrow">YOUR BEST HABIT</p><h3 id="streakMessage">Start your streak today</h3><p class="muted" id="streakDetail">Complete at least one task each day.</p></div></section>
-          <section class="panel requests-panel"><div class="panel-heading"><div><p class="eyebrow">SOCIAL</p><h2>Friend requests</h2></div><span id="requestCount" class="count-pill">0</span></div><div id="requestList" class="request-list"><p class="muted small">No pending requests.</p></div></section>
-        </aside>
-      </section>
+      </div>
+      </div>
     </div>
   </main>
 
   <dialog id="peopleDialog" class="modal">
-    <div class="modal-head"><div><p class="eyebrow">COMMUNITY</p><h2>Find people</h2></div><button class="icon-button close-dialog" type="button">×</button></div>
+    <div class="modal-head"><div><h2>Find people</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
     <input id="peopleSearch" class="search-input" type="search" placeholder="Search by name or email">
     <div id="peopleList" class="people-list"><p class="muted">Loading users…</p></div>
   </dialog>
 
   <dialog id="publicProfileDialog" class="modal public-profile-modal">
-    <div class="modal-head"><div><p class="eyebrow">PAIRUP MEMBER</p><h2>Profile</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
+    <div class="modal-head"><div><h2>Profile</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
     <div class="public-profile-head"><img id="publicProfileAvatar" alt="Profile picture"><div><h3 id="publicProfileName">Member</h3><p id="publicProfileEmail" class="muted small"></p><span id="publicProfileFriendState" class="profile-state"></span></div></div>
     <div id="publicProfileStats" class="public-profile-stats"></div>
     <section class="public-profile-activity"><div class="profile-activity-heading"><b>Activity on <span id="publicProfileDateLabel">today</span></b><span id="publicProfileStreak" class="streak-badge"></span></div><div id="publicProfileTasks" class="public-profile-tasks"></div></section>
-    <div class="public-profile-actions"><button id="publicProfileAddBtn" class="btn btn-primary full" type="button">＋ Add friend</button></div>
+    <div class="public-profile-actions"><button id="publicProfileAddBtn" class="btn btn-primary full" type="button">＋ Add friend</button><button id="publicProfileRemoveBtn" class="btn btn-signout full hidden" type="button">Remove friend</button></div>
   </dialog>
 
   <dialog id="profileDialog" class="modal profile-modal">
-    <div class="modal-head"><div><p class="eyebrow">YOUR ACCOUNT</p><h2>Edit profile</h2></div><button class="icon-button close-dialog" type="button">×</button></div>
+    <div class="modal-head"><div><h2>Edit profile</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
     <form id="profileForm">
-      <div class="profile-upload"><img id="profilePreview" alt="Profile picture"><span class="muted small">Profile image preview</span></div>
+      <div class="profile-upload"><img id="profilePreview" alt="Profile picture"></div>
       <label class="field">Display name<input id="profileName" type="text" maxlength="50" required></label>
-      <label class="field">Profile image URL <span class="muted">Paste a public, direct HTTPS image link</span><input id="profilePhotoUrl" type="url" placeholder="https://example.com/your-photo.jpg" autocomplete="url"></label>
-      <p class="image-url-note">No image is uploaded to Firebase. PairUp displays the image from the link you provide.</p>
-      <a class="image-host-link" href="https://instasize.com/tools/image-link" target="_blank" rel="noopener noreferrer">Need an image link? Upload your picture or generate a link with Instasize ↗</a>
+      <label class="field">Profile image URL <span class="muted">Direct HTTPS link</span><input id="profilePhotoUrl" type="url" placeholder="https://example.com/your-photo.jpg" autocomplete="url"></label>
+      <a class="image-host-link" href="https://instasize.com/tools/image-link" target="_blank" rel="noopener noreferrer">Need a link? Make one with Instasize ↗</a>
       <button class="btn btn-primary full" type="submit">Save profile</button>
       <p id="profileError" class="error-text"></p>
+      <button id="logoutBtn" class="btn btn-signout full" type="button">Sign out</button>
     </form>
   </dialog>
 
