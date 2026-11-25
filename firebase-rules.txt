@@ -1,0 +1,56 @@
+// Firestore Rules (Firebase Console → Firestore Database → Rules)
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isFriend(otherUid) {
+      return exists(/databases/$(database)/documents/friendships/$(pairId(request.auth.uid, otherUid)));
+    }
+    function pairId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if signedIn() && request.auth.uid == uid;
+    }
+    match /tasks/{taskId} {
+      allow read: if signedIn() && (
+        resource.data.ownerUid == request.auth.uid || isFriend(resource.data.ownerUid)
+      );
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+    match /friendRequests/{requestId} {
+      allow read: if signedIn() && (
+        resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid
+      );
+      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if signedIn() && resource.data.toUid == request.auth.uid
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if signedIn() && (
+        resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid
+      );
+    }
+    match /friendships/{friendshipId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.users.size() == 2
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.users[0] + '_' + request.resource.data.users[1])).data.status == 'accepted'
+        || (signedIn()
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.users.size() == 2
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.users[1] + '_' + request.resource.data.users[0])).data.status == 'accepted');
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
+      allow update: if false;
+    }
+  }
+}
+
